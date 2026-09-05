@@ -1,0 +1,53 @@
+name: Release Linux binary
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create/upload (e.g. v2.15.0-oob1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Pack tarball
+        run: |
+          stage=$(mktemp -d)
+          install -m 755 target/release/pullauta "$stage/pullauta"
+          tar -C "$stage" -czf karttapullautin-x86_64-linux.tar.gz pullauta
+          ls -la karttapullautin-x86_64-linux.tar.gz
+          ./target/release/pullauta --help >/dev/null || true
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create / update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          files: karttapullautin-x86_64-linux.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
