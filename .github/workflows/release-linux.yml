@@ -19,11 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build release
-        run: cargo build --release
+      - name: Build release (Debian bullseye / glibc 2.31)
+        # Podkladárna's mambaforge image is older than ubuntu-latest;
+        # a host-built binary needs GLIBC_2.34 and fails at runtime.
+        run: |
+          docker run --rm \
+            -v "$PWD":/src \
+            -w /src \
+            rust:1-bullseye \
+            cargo build --release
 
       - name: Pack tarball
         run: |
@@ -31,7 +35,8 @@ jobs:
           install -m 755 target/release/pullauta "$stage/pullauta"
           tar -C "$stage" -czf karttapullautin-x86_64-linux.tar.gz pullauta
           ls -la karttapullautin-x86_64-linux.tar.gz
-          ./target/release/pullauta --help >/dev/null || true
+          # glibc symbols should stay <= 2.31
+          (objdump -T target/release/pullauta | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -5) || true
 
       - name: Resolve tag
         id: tag
